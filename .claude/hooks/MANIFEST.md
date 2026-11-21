@@ -199,6 +199,18 @@ No `hooks/hooks.json` shipped. Plugin contributes the frontend-design skill only
 
 No `hooks/hooks.json` shipped. Plugin contributes the skill-creator skill only.
 
+### `caveman@caveman` c72984e4392c
+
+No `hooks/hooks.json` shipped under this plugin's installPath. Plugin contributes the caveman skills and agents (terse-reply style, commit and review helpers); its session-start mode reminder is wired by the operator's own settings, not by a plugin hooks.json, and it is not part of the repo's hook set.
+
+### `clangd-lsp@claude-plugins-official` 1.0.0
+
+No `hooks/hooks.json` shipped. Plugin contributes the clangd language-server wiring only; the repo's own symbol queries go through `scripts/todo-graph/resolve_symbol.py` and `compile_commands.json`.
+
+### `hostinger@claude-plugins-official` 1.2.0
+
+No `hooks/hooks.json` shipped. Plugin contributes the Hostinger deployment skills only; nothing in the repo's build, test or run path uses it.
+
 ### `claude-md-management@claude-plugins-official` 1.0.0
 
 No `hooks/hooks.json` shipped. Plugin contributes the revise-claude-md / claude-md-improver skills only.
