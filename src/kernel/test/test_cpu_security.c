@@ -26,6 +26,7 @@ extern int snprintf(char *buf, size_t size, const char *fmt, ...);
 #include "kernel/smp.h"
 #include "kernel/cpu_regs.h"
 #include "kernel/msr.h"
+#include "kernel/gdt.h"
 #include "kernel/mtrr.h"
 #include "kernel/mm/memops.h"
 #include "kernel/mm/vmm.h"
@@ -44,6 +45,20 @@ static void test_nx_efer_set(void)
     uint64_t efer = msr_read(MSR_IA32_EFER);
     TEST_ASSERT(efer & (1ULL << 11),
                 "EFER.NXE is set when CPU supports NX");
+}
+
+/* STAR[63:48] must carry RPL 3: AMD SYSRET does not OR it in, so an RPL-0
+ * field yields SS=0x18 in a ring-3 frame (iretq invariant halt, KVM on Zen 5). */
+static void test_star_sysret_rpl3(void)
+{
+    if (!(msr_read(MSR_IA32_EFER) & EFER_SCE)) {
+        TEST_SKIP("SYSCALL disabled (INT 0x80 fallback)");
+        return;
+    }
+    uint64_t sysret_sel = (msr_read(MSR_IA32_STAR) >> 48) & 0xFFFF;
+    TEST_ASSERT_EQ(sysret_sel & 3, 3, "STAR[49:48] (SYSRET RPL) is 3");
+    TEST_ASSERT_EQ((sysret_sel + 8) & 0xFFFC, GDT_USER_DATA,
+                   "SYSRET SS base selector is GDT_USER_DATA");
 }
 
 /* ---- S2: SMEP/SMAP state ---- */
@@ -1052,8 +1067,10 @@ static void test_pku_xsave_offset(void)
     extern struct cpu_features g_cpu;
     TEST_ASSERT(g_cpu.pkru_xsave_offset > 0,
                 "PKRU XSAVE offset is non-zero when PKU supported");
-    TEST_ASSERT_EQ(g_cpu.pkru_xsave_size, 4,
-                   "PKRU XSAVE component size is 4 bytes");
+    /* CPUID.(0DH,9):EAX is 8 on Intel and AMD: PKRU is 4 bytes of state in an
+     * 8-byte component (Intel SDM Vol 1, XSAVE-managed state). */
+    TEST_ASSERT_EQ(g_cpu.pkru_xsave_size, 8,
+                   "PKRU XSAVE component size is 8 bytes");
 }
 
 /* ---- S6: 1 GiB huge pages ---- */
@@ -1452,8 +1469,13 @@ static void test_osvw_fields(void)
         return;
     }
     extern struct cpu_features g_cpu;
-    TEST_ASSERT(g_cpu.osvw_length > 0,
-                "OSVW: osvw_length > 0 when OSVW supported");
+    /* OSVW_ID_Length is a 16-bit count and 0 is valid (no errata tracked, which
+     * Zen 5 reports): the invariant is that a bit at or past the length reads
+     * as inactive, never that the length is non-zero. */
+    TEST_ASSERT(g_cpu.osvw_length <= 0xFFFF,
+                "OSVW: osvw_length fits the 16-bit ID_Length field");
+    TEST_ASSERT_EQ(cpu_has_erratum(g_cpu.osvw_length), 0,
+                   "OSVW: erratum at index osvw_length reads inactive");
 }
 
 static void test_rdtscp_cpu_id(void)
@@ -2106,6 +2128,8 @@ void test_register_x86(void)
 {
     test_suite_register_cat("CPU security: NX EFER.NXE set",
         test_nx_efer_set, TEST_CAT_X86);
+    test_suite_register_cat("CPU security: STAR SYSRET selector carries RPL 3",
+        test_star_sysret_rpl3, TEST_CAT_X86);
     test_suite_register_cat("CPU security: SMEP/SMAP CR4 accessible",
         test_smep_smap_state, TEST_CAT_X86);
     test_suite_register_cat("CPU security: activation-state helper callable",

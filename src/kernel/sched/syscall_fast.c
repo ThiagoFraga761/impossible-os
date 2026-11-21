@@ -50,9 +50,13 @@ void syscall_init_fast(void)
      * Bits 47:32 = SYSCALL selectors: CS = this value, SS = this+8.
      *   -> GDT_KERNEL_CODE (0x08): CS=0x08 (kernel code), SS=0x10 (kernel data)
      * Bits 63:48 = SYSRET selectors: SS = this+8, CS = this+16.
-     *   -> GDT_USER_DATA - 8 = 0x10: SS=0x18 (user data), CS=0x20 (user code) */
+     *   -> GDT_USER_DATA - 8 = 0x10: SS=0x18 (user data), CS=0x20 (user code)
+     * The RPL bits go IN the field: Intel SYSRET ORs 3 into both selectors,
+     * but AMD (Zen) loads SS from STAR+8 as written, so an RPL-0 field left
+     * a ring-3 interrupt frame with CS=0x23 SS=0x18 and tripped the iretq
+     * invariant. With |3: CS=0x23, SS=0x1B on both vendors. */
     star = ((uint64_t)GDT_KERNEL_CODE << 32) |
-           ((uint64_t)(GDT_USER_DATA - 8) << 48);
+           ((uint64_t)((GDT_USER_DATA - 8) | 3) << 48);
     msr_write(MSR_IA32_STAR, star);
 
     /* Set LSTAR to assembly entry point */

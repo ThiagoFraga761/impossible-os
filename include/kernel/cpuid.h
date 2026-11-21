@@ -280,10 +280,10 @@ struct cpu_features {
 
     /* PKRU XSAVE component (from leaf 0x0D subleaf 9) */
     uint32_t pkru_xsave_offset;   /* byte offset of PKRU in XSAVE area (0 = not available) */
-    uint32_t pkru_xsave_size;     /* size of PKRU component (4 bytes on Intel) */
+    uint32_t pkru_xsave_size;     /* size of PKRU component (8 bytes, CPUID 0DH.9:EAX) */
 
     /* AMD OSVW (OS Visible Workarounds) */
-    uint32_t osvw_length;         /* number of errata tracked (0 = OSVW not available) */
+    uint32_t osvw_length;         /* number of errata tracked (0 = none tracked; valid) */
     uint64_t osvw_status;         /* bitmask of active errata */
 };
 

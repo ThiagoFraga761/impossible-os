@@ -207,7 +207,7 @@ void cpuid_init(void)
     /* ---- Leaf 0x0D subleaf 9: PKRU XSAVE component ---- */
     if (g_cpu.max_leaf >= 0x0D && (g_cpu.xcr0_supported & (1UL << 9))) {
         cpuid_raw(0x0D, 9, &eax, &ebx, &ecx, &edx);
-        g_cpu.pkru_xsave_size   = eax;  /* component size (4 bytes) */
+        g_cpu.pkru_xsave_size   = eax;  /* component size (8 bytes) */
         g_cpu.pkru_xsave_offset = ebx;  /* byte offset in XSAVE area */
     }
 
