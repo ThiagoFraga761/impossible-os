@@ -169,7 +169,7 @@ python3 "$MANIFEST_LINE" --append "$MANIFEST" \
 # PROMPT_FILE); it does not relaunch or watch the session.
 if systemd-run --user --collect "--unit=$UNIT" \
      "--setenv=CODEX_REVIEWER_DISPATCH=1" "--setenv=HOME=$HOME" \
-     "--setenv=PATH=$PATH" --same-dir \
+     "--setenv=PATH=$PATH" ${CODEX_HOME:+"--setenv=CODEX_HOME=$CODEX_HOME"} --same-dir \
      /bin/bash -c "$RUN > $Q_LOG 2>&1; rc=\$?; echo \"Turn completed (rc=\$rc)\" >> $Q_LOG; rm -f $Q_PROMPT" \
      >/dev/null 2>&1; then
   :
