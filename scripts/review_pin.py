@@ -20,6 +20,7 @@ A pin that is missing or invalid raises Refused. Nothing here falls back to an e
     --raw                                          # with --highest: the transcript is the review itself
 """
 import argparse
+import os
 import pathlib
 import re
 import sys
@@ -27,7 +28,16 @@ import tomllib
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 PIN = REPO / ".conclave" / "reviewers.toml"
-CODEX_CONFIG = pathlib.Path.home() / ".codex" / "config.toml"
+
+
+def codex_config_path():
+    """The config Codex itself reads: $CODEX_HOME/config.toml, else ~/.codex/config.toml.
+    Read at call time, so a test can point the pin at a config of its own."""
+    home = os.environ.get("CODEX_HOME")
+    return (pathlib.Path(home) if home else pathlib.Path.home() / ".codex") / "config.toml"
+
+
+CODEX_CONFIG = codex_config_path()
 
 POLICY = "four-pass"
 # The passes of a section, in the order they run. `reconciliation` runs only after a completion that returned gaps.
@@ -442,8 +452,9 @@ def repair_base(manifest, todo, section):
     return found["head"]
 
 
-def check_codex_model(pin, config=CODEX_CONFIG):
+def check_codex_model(pin, config=None):
     """Refuse when Codex is configured for a model other than the pinned one. The pin never sets it by flag."""
+    config = config or codex_config_path()
     try:
         configured = tomllib.loads(pathlib.Path(config).read_bytes().decode("utf-8")).get("model")
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
@@ -470,7 +481,7 @@ def main(argv=None):
     parser.add_argument("--transcript")
     parser.add_argument("--paths-file")
     parser.add_argument("--pin", default=str(PIN))
-    parser.add_argument("--codex-config", default=str(CODEX_CONFIG))
+    parser.add_argument("--codex-config", default=str(codex_config_path()))
     args = parser.parse_args(argv)
     try:
         pin = load_pin(args.pin)

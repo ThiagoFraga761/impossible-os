@@ -10,8 +10,8 @@ section it:
     files, relevant tests, required gates, complexity, working-tree hashes;
   * extracts candidate symbols (backticked identifiers + names in the section);
   * resolves each symbol's DEFINITION + reference count -- via clangd +
-    compile_commands.json when both are present (precise), else ripgrep (one
-    batched `rg --json` over src/include/user), always producing a result;
+    compile_commands.json when both are present (precise), else ripgrep, or the same search in Python where rg is not installed (one
+    batched search over src/include/user), always producing a result;
   * flags registration / ABI / syscall touchpoints and likely callers;
   * runs evidence-bundle.py   -> compact structural views;
   * writes the whole pack under .claude/overnight/packs/<key>/pack.json and
@@ -64,6 +64,55 @@ def _sh(cmd, cwd, timeout=60):
                               text=True, timeout=timeout)
     except Exception:
         return None
+
+
+class _Found:
+    """What `_search` returns: the `rg --json` lines, whichever tool made them."""
+    def __init__(self, stdout: str):
+        self.stdout = stdout
+
+
+def _py_search(pattern: str, paths: list, root: Path, timeout: float) -> "_Found | None":
+    """`rg --json -e PATTERN -- PATHS` for a host without ripgrep, in the same
+    line format, so callers read one shape. Skips dot-directories and `build/`
+    the way a default rg run skips ignored paths; binary files (a NUL in the
+    first 4 KiB) are not searched. Past `timeout` the answer is None (could not
+    read), never a short list that reads as "no matches"."""
+    rx = re.compile(pattern)
+    deadline = time.monotonic() + timeout
+    out = []
+    for top in paths:
+        base = root / top
+        files = [base] if base.is_file() else []
+        if base.is_dir():
+            for dp, dns, fns in os.walk(base):
+                dns[:] = sorted(d for d in dns if not d.startswith(".") and d != "build")
+                files.extend(Path(dp) / f for f in sorted(fns))
+        for f in files:
+            if time.monotonic() > deadline:
+                return None
+            try:
+                raw = f.read_bytes()
+            except OSError:
+                continue
+            if b"\0" in raw[:4096]:
+                continue
+            rel = os.path.relpath(f, root)
+            for lno, text in enumerate(raw.decode("utf-8", "replace").splitlines(), 1):
+                subs = [{"match": {"text": m.group(0)}, "start": m.start(), "end": m.end()}
+                        for m in rx.finditer(text)]
+                if subs:
+                    out.append(json.dumps({"type": "match", "data": {
+                        "path": {"text": rel}, "line_number": lno,
+                        "lines": {"text": text + "\n"}, "submatches": subs}}))
+    return _Found("\n".join(out))
+
+
+def _search(pattern: str, paths: list, root: Path, timeout: float = 90):
+    """ripgrep when installed, else the same search in Python."""
+    if shutil.which("rg"):
+        return _sh(["rg", "--json", "-e", pattern, "--", *paths], root, timeout=timeout)
+    return _py_search(pattern, paths, root, timeout)
 
 
 # section_block is imported from section_slice.py -- see the note there.
@@ -134,7 +183,7 @@ def rg_resolve(root: Path, symbols: list, paths: list) -> dict:
     if not symbols:
         return out
     pattern = r"\b(" + "|".join(re.escape(s) for s in symbols) + r")\b"
-    r = _sh(["rg", "--json", "-e", pattern, "--", *paths], root, timeout=90)
+    r = _search(pattern, paths, root)
     if r is None:
         return {s: {k: v for k, v in d.items() if k != "_rank"}
                 for s, d in out.items()}
@@ -289,7 +338,7 @@ def _rg_first_positions(root: Path, symbols: list, paths: list) -> dict:
     if not symbols:
         return pos
     pattern = r"\b(" + "|".join(re.escape(s) for s in symbols) + r")\b"
-    r = _sh(["rg", "--json", "-e", pattern, "--", *paths], root, timeout=90)
+    r = _search(pattern, paths, root)
     if r is None:
         return pos
     for ln in r.stdout.splitlines():

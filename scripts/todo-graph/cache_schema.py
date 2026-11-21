@@ -5405,6 +5405,12 @@ def history_git_env(base_env=None) -> dict:
     """
     env = dict(os.environ if base_env is None else base_env)
     env["GIT_GRAFT_FILE"] = os.devnull
+    # Callers tell "not a git repository" from other failures by git's message, so
+    # it must be the C-locale one: under pt_BR git says "nao e um repositorio git",
+    # a determinate answer read as indeterminate and a build that refused every
+    # corpus outside a repository.
+    env["LC_ALL"] = "C"
+    env.pop("LANGUAGE", None)
     return env
 
 

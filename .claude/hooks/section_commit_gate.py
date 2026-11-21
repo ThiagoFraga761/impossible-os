@@ -1456,7 +1456,10 @@ def _bash_rejects_from(cmd: str, line: int) -> bool:
         return False  # fail-direction: past the budget the text is read conservatively
     _SYNTAX_CHECKS_LEFT -= 1
     try:
+        # The error text is read for "line N:", so it must be the C-locale message: under
+        # pt_BR bash says "linha N:" and every refused-by-bash script read as runnable.
         done = subprocess.run(["bash", "-n", "-c", cmd], capture_output=True, text=True,
+                              env={**os.environ, "LC_ALL": "C", "LANGUAGE": ""},
                               timeout=5)  # deadline: 5 s, a parse only
     except (OSError, subprocess.SubprocessError):
         return False  # fail-direction: False keeps the conservative reading
